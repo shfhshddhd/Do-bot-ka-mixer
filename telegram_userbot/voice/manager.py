@@ -243,9 +243,17 @@ class VoiceChatManager:
             await self._persist_sessions()
         return f"👋 Left all active target VCs ({count} total)."
 
+    async def stop_playback(self, target: int | str | None = None) -> str:
+        """Stop file playback while keeping the private relay connection alive."""
+        target_id = self._resolve_target(target)
+        if target_id is None or target_id not in self.sessions:
+            raise ValueError("Specify an active target ID when more than one relay is active.")
+        await self.calls.play(target_id, self._media_stream())
+        return f"⏹️ Playback stopped for target <code>{target_id}</code>; relay remains active."
+
     async def leave_playback_only(self, target: int | str | None = None) -> str:
         # The native relay has one incoming source and one outgoing stream per
-        # target. Leaving a target is the exact playback-only operation.
+        # target. Leaving a target is the exact private playback-only operation.
         return await self.leave(target)
 
     def _resolve_target(self, target: int | str | None) -> int | None:

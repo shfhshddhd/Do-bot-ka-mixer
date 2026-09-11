@@ -23,7 +23,10 @@ from bot.handlers.gemini_keys import (
 )
 from bot.handlers.update_controls import update_control_callback
 from bot.handlers.voice_chat import build_voice_chat_handler
-from bot.handlers.private_vc_setup import build_private_vc_setup_handler
+from bot.handlers.private_vc_setup import (
+    build_private_vc_setup_handler,
+    privategroupvcunlink_command,
+)
 
 
 def register_all(app: Application, manager) -> None:
@@ -34,6 +37,7 @@ def register_all(app: Application, manager) -> None:
     app.add_handler(build_host_handler())
     app.add_handler(CommandHandler("unhost", unhost_command))
     app.add_handler(build_private_vc_setup_handler())
+    app.add_handler(CommandHandler("privategroupvcunlink", privategroupvcunlink_command))
     app.add_handler(CommandHandler("targetadd", targetadd_command))
     app.add_handler(CommandHandler("targetremove", targetremove_command))
     app.add_handler(CommandHandler("targetlist", targetlist_command))

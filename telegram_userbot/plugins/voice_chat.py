@@ -1243,14 +1243,11 @@ _manager: VoiceChatManager | None = None
 
 
 async def init(client_instance):
+    """Reuse the manager created by UserbotClient; never create a second VC client."""
     global _manager
-    previous = getattr(client_instance, "_voice_chat_manager", None)
-    if previous is not None:
-        with contextlib.suppress(Exception):
-            await previous.shutdown()
-    manager = VoiceChatManager(client_instance)
-    _manager = manager
-    setattr(client_instance, "_voice_chat_manager", manager)
+    _manager = getattr(client_instance, "_voice_chat_manager", None)
+    if _manager is None:
+        raise RuntimeError("The shared voice-chat manager was not initialized.")
 
 
 async def register_commands():
@@ -1259,13 +1256,26 @@ async def register_commands():
     add_handler(
         "voice_chat",
         [
-            ".vcjoin <group> — Join an active group Voice Chat from the private control bot",
-            ".vcstatus — Show the connected group and playback status",
-            ".vcstop — Stop playback and clear the queue without leaving",
-            ".vcleave — Leave and clear the Voice Chat",
+            ".vcjoin <group> — Join an active group Voice Chat",
+            ".vcstatus — Show connected private VC relays",
+            ".vcstop — Stop playback without unhosting",
+            ".vcleave — Leave the normal Voice Chat",
             ".play — Play replied audio in the connected Voice Chat",
             ".pause / .resume / .queue / .clearqueue — Playback controls",
-            ".volume <0-100000000> / .mute / .unmute — Gain-only playback controls",
+            ".volume <0-100000000> / .mute / .unmute — Normal playback controls",
         ],
-        "Private control-bot Voice Chat playback and gain-only controls",
+        "Existing Voice Chat playback controls",
+    )
+    add_handler(
+        "privatevcsetup",
+        [
+            "/join <target_group_id> — Join the private source and target VCs",
+            "/leave / /leaveall / /leaveplay — Leave private relay connections",
+            "/level <1-25> / /bass <0-15> — Private audio controls",
+            "/mute / /unmute — Mute or unmute private forwarding",
+            "/startrecord / /stoprecord — Record private source audio",
+            "/speedtest — Run the private VC speed test",
+            "/privategroupvcunlink — Remove the setup without unhosting",
+        ],
+        "Private VC Setup commands available only in the registered control group",
     )

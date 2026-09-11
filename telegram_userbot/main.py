@@ -30,6 +30,7 @@ CONTROL_BOT_COMMANDS = [
     BotCommand("host", "Host a Telegram account"),
     BotCommand("unhost", "Remove the hosted account"),
     BotCommand("privategroupvcsetup", "Register a private VC control group"),
+    BotCommand("privategroupvcunlink", "Remove the private VC setup"),
     BotCommand("targetadd", "Add a group target mapping"),
     BotCommand("targetremove", "Remove a target mapping"),
     BotCommand("targetlist", "List target mappings"),

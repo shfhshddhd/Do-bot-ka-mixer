@@ -12,6 +12,8 @@ MENU_TEXT = """👋 <b>Welcome to FLEX FUCKER USERBOT</b>
 <b>🔐 Account</b>
 /host — Connect and host your Telegram account (OTP/2FA required)
 /unhost — Remove your hosted account and stop the userbot
+/privategroupvcsetup <private_group_chat_id> — Register Private VC source/control group
+/privategroupvcunlink — Remove Private VC setup without unhosting
 /cancel — Cancel an in-progress hosting operation
 
 <b>ℹ️ General</b>
@@ -32,6 +34,8 @@ After <code>/host</code> succeeds, use these commands from your hosted account:
 <b>🎙️ Voice Chat (private control bot only)</b>
 <code>.vcjoin &lt;group&gt;</code> — join an active Voice Chat
 <code>.vcstatus</code> — show connected group and playback status
+<code>/join &lt;target_group_id&gt;</code> — private source-to-target relay
+<code>/leave</code> / <code>/leaveall</code> — clean private relay connections
 Reply to audio/voice/video with <code>.play</code> — play it in the connected Voice Chat
 
 The complete plugin command list is available through <code>.help</code>.

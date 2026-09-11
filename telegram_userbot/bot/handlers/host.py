@@ -19,6 +19,7 @@ from telegram.ext import (
     filters,
 )
 from utils.message_ui import reply_html, reply_text
+import database.mongo as db
 
 logger = logging.getLogger(__name__)
 
@@ -224,6 +225,13 @@ async def unhost_command(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None
         await reply_text(update.message, "ℹ️ You don't have an active hosted account.")
         return
 
+    hosted = manager.get_client(user_id)
+    if hosted is not None and hosted.voice_chat is not None:
+        try:
+            await hosted.voice_chat.leave_all()
+        except Exception:
+            logger.exception("Private VC cleanup failed during unhost for %s", user_id)
+    await db.clear_voice_control(user_id)
     await manager.remove_session(user_id)
     await reply_text(
         update.message,

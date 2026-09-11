@@ -148,7 +148,9 @@ async def voice_chat_command(
             text = await voice.join_target(args)
         elif command in {"vcstatus"}:
             text = await voice.control_status()
-        elif command in {"vcstop", "leave"}:
+        elif command == "vcstop":
+            text = await voice.stop_playback(args or None)
+        elif command in {"vcleave", "leave"}:
             text = await voice.leave(args or None)
         elif command == "leaveall":
             text = await voice.leave_all()
