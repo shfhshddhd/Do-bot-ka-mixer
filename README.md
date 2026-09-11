@@ -61,7 +61,16 @@ manager owns watchdog reconnects, recordings, playback restoration, and
 unhost cleanup. The relay sends no Telegram messages from the hosted account;
 control replies and recording uploads come from the Bot API control bot.
 
-`tests/` covers the deterministic PCM frame controls. GitHub Actions also
-compiles every Python file and runs the unit suite. Live Telegram voice audio
-still requires a deployed manual test because this sandbox cannot join real
-voice chats.
+`tests/` covers the deterministic PCM frame controls. The finite verification
+commands are:
+
+```text
+python -m compileall -q telegram_userbot tests
+PYTHONPATH=.:telegram_userbot python -m unittest discover -s tests -v
+```
+
+Live Telegram voice audio still requires a deployed manual test because this
+sandbox cannot join real voice chats. The connected GitHub write proxy accepted
+the source commits but rejected `.github/workflows/*` paths, so GitHub Actions
+must be enabled by adding the two workflow files from the checkout through
+GitHub's normal UI or CLI.
