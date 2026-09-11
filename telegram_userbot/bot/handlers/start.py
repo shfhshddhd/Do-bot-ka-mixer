@@ -12,7 +12,7 @@ MENU_TEXT = """👋 <b>Welcome to FLEX FUCKER USERBOT</b>
 <b>🔐 Account</b>
 /host — Connect and host your Telegram account (OTP/2FA required)
 /unhost — Remove your hosted account and stop the userbot
-/privategroupvcsetup <private_group_chat_id> — Register Private VC source/control group
+/privategroupvcsetup &lt;private_group_chat_id&gt; — Register Private VC source/control group
 /privategroupvcunlink — Remove Private VC setup without unhosting
 /cancel — Cancel an in-progress hosting operation
 
