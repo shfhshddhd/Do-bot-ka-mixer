@@ -21,6 +21,7 @@ _VOICE_COMMAND_RE = re.compile(
     r"play|pause|resume|queue|clearqueue|volume|level|bass|mute|unmute|"
     r"startrecord|stoprecord|speedtest"
     r")"
+    r"(?:@[A-Za-z0-9_]+)?"
     r"(?:\s+(?P<args>.*?))?\s*$",
     re.IGNORECASE,
 )
