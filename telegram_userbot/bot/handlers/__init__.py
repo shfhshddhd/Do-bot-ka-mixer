@@ -49,6 +49,6 @@ def register_all(app: Application, manager) -> None:
     app.add_handler(CommandHandler("listkeys", listkeys_command))
     app.add_handler(CommandHandler("delkey", delkey_command))
     app.add_handler(CommandHandler("switchkey", switchkey_command))
-    # Dot-prefixed Voice Chat controls are deliberately private-chat only.
+    # VC controls are deliberately limited to registered control groups.
     app.add_handler(build_voice_chat_handler())
     app.add_handler(CallbackQueryHandler(update_control_callback, pattern=r"^self_update:"))
