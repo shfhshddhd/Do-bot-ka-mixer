@@ -1,0 +1,281 @@
+name: Telegram Userbot
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: telegram-userbot
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  run-bot:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 350
+
+    env:
+      BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
+      TELEGRAM_API_ID: ${{ secrets.TELEGRAM_API_ID }}
+      TELEGRAM_API_HASH: ${{ secrets.TELEGRAM_API_HASH }}
+      MONGO_URI: ${{ secrets.MONGO_URI }}
+      SESSION_SECRET: ${{ secrets.SESSION_SECRET }}
+      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+      MINI_APP_PUBLIC_PATH: /mini-app/
+      PORT: "8008"
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.13
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y curl ffmpeg pulseaudio pulseaudio-utils
+
+      - name: Check VC audio dependencies
+        run: |
+          set -euo pipefail
+          command -v pulseaudio
+          command -v pactl
+          command -v ffmpeg
+          pulseaudio --version
+          pactl --version
+          ffmpeg -version | head -n 1
+
+      - name: Install Python dependencies
+        run: |
+          set -euo pipefail
+          python -m pip install --upgrade pip
+          python -m pip install .
+
+      - name: Download Cloudflare Tunnel
+        run: |
+          set -euo pipefail
+          curl --fail --location --retry 3 \
+            --output cloudflared \
+            https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64
+          chmod +x cloudflared
+          ./cloudflared --version
+
+      - name: Start bot and Mini App watchdog
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+
+          readonly APP_PORT="${PORT:-8008}"
+          readonly LOCAL_APP_URL="http://127.0.0.1:${APP_PORT}/mini-app/"
+          readonly MINI_APP_PATH="${MINI_APP_PUBLIC_PATH:-/mini-app/}"
+          readonly TUNNEL_LOG="${RUNNER_TEMP}/cloudflared.log"
+          readonly BOT_LOG="${RUNNER_TEMP}/telegram-userbot.log"
+
+          BOT_PID=""
+          TUNNEL_PID=""
+          TUNNEL_URL=""
+
+          stop_process_group() {
+            local pid="${1:-}"
+            [[ -z "${pid}" ]] && return 0
+
+            kill -TERM -- "-${pid}" 2>/dev/null || kill -TERM "${pid}" 2>/dev/null || true
+            for _ in {1..20}; do
+              kill -0 "${pid}" 2>/dev/null || return 0
+              sleep 1
+            done
+
+            kill -KILL -- "-${pid}" 2>/dev/null || kill -KILL "${pid}" 2>/dev/null || true
+          }
+
+          stop_bot() {
+            if [[ -n "${BOT_PID}" ]]; then
+              stop_process_group "${BOT_PID}"
+              wait "${BOT_PID}" 2>/dev/null || true
+              BOT_PID=""
+            fi
+          }
+
+          stop_tunnel() {
+            if [[ -n "${TUNNEL_PID}" ]]; then
+              stop_process_group "${TUNNEL_PID}"
+              wait "${TUNNEL_PID}" 2>/dev/null || true
+              TUNNEL_PID=""
+            fi
+          }
+
+          cleanup() {
+            set +e
+            stop_bot
+            stop_tunnel
+          }
+          trap cleanup EXIT INT TERM
+
+          check_local_app() {
+            for _ in {1..3}; do
+              if curl --fail --silent --show-error --location --max-time 10 \
+                "${LOCAL_APP_URL}" | grep --ignore-case --quiet "<html"; then
+                return 0
+              fi
+              sleep 2
+            done
+            return 1
+          }
+
+          check_public_app() {
+            [[ -n "${TUNNEL_URL}" ]] || return 1
+            for _ in {1..3}; do
+              if curl --fail --silent --show-error --location --max-time 15 \
+                "${TUNNEL_URL}${MINI_APP_PATH}" | grep --ignore-case --quiet "<html"; then
+                return 0
+              fi
+              sleep 2
+            done
+            return 1
+          }
+
+          start_tunnel() {
+            stop_tunnel
+            TUNNEL_URL=""
+            rm -f "${TUNNEL_LOG}"
+
+            echo "Starting Cloudflare Quick Tunnel for ${APP_PORT}..."
+            setsid ./cloudflared tunnel \
+              --no-autoupdate \
+              --url "http://127.0.0.1:${APP_PORT}" \
+              >"${TUNNEL_LOG}" 2>&1 &
+            TUNNEL_PID=$!
+
+            for _ in {1..45}; do
+              TUNNEL_URL="$(
+                grep --only-matching --extended-regexp \
+                  'https://[-a-zA-Z0-9]+\.trycloudflare\.com' \
+                  "${TUNNEL_LOG}" | head -n 1 || true
+              )"
+              if [[ -n "${TUNNEL_URL}" ]]; then
+                echo "Cloudflare tunnel is ${TUNNEL_URL}"
+                return 0
+              fi
+
+              if ! kill -0 "${TUNNEL_PID}" 2>/dev/null; then
+                echo "Cloudflare tunnel exited before publishing a URL."
+                cat "${TUNNEL_LOG}"
+                return 1
+              fi
+              sleep 2
+            done
+
+            echo "Cloudflare tunnel did not publish a URL in time."
+            cat "${TUNNEL_LOG}"
+            return 1
+          }
+
+          start_bot() {
+            stop_bot
+            rm -f "${BOT_LOG}"
+
+            echo "Starting Telegram bot with Mini App URL ${TUNNEL_URL}${MINI_APP_PATH}"
+            setsid env \
+              PYTHONPATH="${PWD}/telegram_userbot:${PWD}" \
+              MINI_APP_URL="${TUNNEL_URL}" \
+              MINI_APP_PUBLIC_PATH="${MINI_APP_PATH}" \
+              PORT="${APP_PORT}" \
+              python -m telegram_userbot.main \
+              >"${BOT_LOG}" 2>&1 &
+            BOT_PID=$!
+
+            for _ in {1..45}; do
+              if check_local_app; then
+                echo "Local Mini App is healthy."
+                return 0
+              fi
+
+              if ! kill -0 "${BOT_PID}" 2>/dev/null; then
+                echo "Telegram bot exited during startup."
+                cat "${BOT_LOG}"
+                return 1
+              fi
+              sleep 2
+            done
+
+            echo "Local Mini App did not become ready."
+            cat "${BOT_LOG}"
+            return 1
+          }
+
+          recover() {
+            local attempt
+            for attempt in {1..5}; do
+              echo "Watchdog recovery attempt ${attempt}/5."
+
+              if ! check_local_app; then
+                echo "Watchdog: local Mini App is unhealthy; restarting the bot."
+                if ! start_bot; then
+                  sleep 5
+                  continue
+                fi
+              fi
+
+              if ! check_public_app; then
+                echo "Watchdog: public tunnel is unhealthy; creating a new tunnel."
+                if ! start_tunnel; then
+                  sleep 5
+                  continue
+                fi
+                if ! start_bot; then
+                  sleep 5
+                  continue
+                fi
+              fi
+
+              if check_local_app && check_public_app; then
+                echo "Watchdog: recovery successful."
+                return 0
+              fi
+              sleep 5
+            done
+
+            echo "Watchdog: recovery failed after five attempts."
+            echo "--- bot log ---"
+            cat "${BOT_LOG}" 2>/dev/null || true
+            echo "--- tunnel log ---"
+            cat "${TUNNEL_LOG}" 2>/dev/null || true
+            return 1
+          }
+
+          start_tunnel
+          start_bot
+
+          if ! check_public_app; then
+            echo "Initial public Mini App health check failed."
+            recover
+          fi
+
+          echo "Telegram bot, Mini App, and watchdog are running."
+          while true; do
+            sleep 60
+
+            echo "Watchdog: checking local Mini App and Cloudflare tunnel..."
+            if ! kill -0 "${BOT_PID}" 2>/dev/null; then
+              echo "Watchdog: Telegram bot process exited; restarting the bot."
+              if ! recover; then
+                exit 1
+              fi
+              continue
+            fi
+
+            if check_local_app && check_public_app; then
+              echo "Watchdog: Mini App is healthy at ${TUNNEL_URL}${MINI_APP_PATH}."
+              continue
+            fi
+
+            recover
+          done
+
+          echo "Telegram bot process exited unexpectedly."
+          cat "${BOT_LOG}" 2>/dev/null || true
+          exit 1
